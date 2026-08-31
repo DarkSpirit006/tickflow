@@ -14,36 +14,40 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
-/** Writes low-frequency diagnostic samples without blocking the server tick thread. */
+/** Writes opt-in diagnostic samples without disk I/O on the server tick thread. */
 final class DiagnosticLogger {
     private static final String HEADER =
             "record_type,timestamp,server_software,bukkit_version,java_version,tps,average_tps,mspt,"
-                    + "compensation_tps,compensation_multiplier,debt,debt_added,debt_before_claim,claimed_ticks,"
-                    + "total_compensated_ticks,online_players,"
-                    + "worlds,enabled,world_time,random_ticks,pickup,mob_timers,potion_duration,tnt,"
-                    + "max_compensation,event,message";
+                    + "compensation_tps,compensation_multiplier,debt_before_claim,debt_added,debt_after_claim,"
+                    + "claimed_ticks,total_claimed_ticks,online_players,worlds,enabled,worldgen_safe,world_time,"
+                    + "random_ticks,pickup,mob_timers,potion_duration,tnt,max_compensation,max_entity_updates,"
+                    + "pickup_updates,mob_timer_updates,potion_updates,tnt_updates,world_time_updates,"
+                    + "skipped_entity_updates,event,message";
 
     private final Path directory;
-    private final ExecutorService writer = Executors.newSingleThreadExecutor(r -> {
-        Thread thread = new Thread(r, "TickFlow-Diagnostics");
-        thread.setDaemon(true);
-        return thread;
-    });
-
+    private final ExecutorService writer;
     private BufferedWriter output;
     private Path currentFile;
     private boolean enabled;
 
     DiagnosticLogger(File dataFolder) {
         directory = dataFolder.toPath().resolve("logs");
+        writer = Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "TickFlow-Diagnostics");
+            thread.setDaemon(true);
+            return thread;
+        });
     }
 
     synchronized void start() {
         if (enabled) {
             return;
         }
+
         try {
             Files.createDirectories(directory);
             String timestamp = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.ROOT).format(new Date());
@@ -68,9 +72,12 @@ final class DiagnosticLogger {
         if (!enabled) {
             return;
         }
-        writeEvent("STOP", "Diagnostics disabled");
         enabled = false;
-        closeOutput();
+        Future<?> closeTask = writer.submit(() -> {
+            append(buildEventLine("STOP", "Diagnostics disabled"), true);
+            closeOutput();
+        });
+        await(closeTask);
     }
 
     synchronized boolean isEnabled() {
@@ -81,84 +88,88 @@ final class DiagnosticLogger {
         return currentFile;
     }
 
-    void sample(TPSCalculator tps, boolean tickFlowEnabled, boolean worldTime, boolean randomTicks,
-                boolean pickup, boolean mobTimers, boolean potionDuration, boolean tnt,
-                int maxCompensation, double maxMultiplier) {
+    void sample(TickTimingSnapshot timing, TickFlowState state, TickFlowConfig config, CompensationStats stats) {
         if (!isEnabled()) {
             return;
         }
 
-        final String line = buildSampleLine(tps, tickFlowEnabled, worldTime, randomTicks, pickup,
-                mobTimers, potionDuration, tnt, maxCompensation, maxMultiplier);
-        writer.execute(() -> append(line));
+        String line = buildSampleLine(timing, state, config, stats);
+        writer.execute(() -> append(line, false));
     }
 
     void event(String event, String message) {
         if (!isEnabled()) {
             return;
         }
-        writer.execute(() -> append(buildEventLine(event, message)));
+        writer.execute(() -> append(buildEventLine(event, message), true));
     }
 
     synchronized void shutdown() {
-        if (enabled) {
-            writeEvent("STOP", "Plugin disabled");
+        stop();
+        writer.shutdown();
+        try {
+            if (!writer.awaitTermination(2, TimeUnit.SECONDS)) {
+                writer.shutdownNow();
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            writer.shutdownNow();
         }
-        enabled = false;
         closeOutput();
-        writer.shutdownNow();
     }
 
-    private String buildSampleLine(TPSCalculator tps, boolean tickFlowEnabled, boolean worldTime,
-                                   boolean randomTicks, boolean pickup, boolean mobTimers,
-                                   boolean potionDuration, boolean tnt, int maxCompensation,
-                                   double maxMultiplier) {
-        double compensationTps = tps.getCompensationTps();
-        double multiplier = compensationTps <= 0.0D ? 1.0D
-                : Math.min(maxMultiplier, 20.0D / compensationTps);
+    private String buildSampleLine(
+            TickTimingSnapshot timing,
+            TickFlowState state,
+            TickFlowConfig config,
+            CompensationStats stats
+    ) {
         return "SAMPLE," + csv(timestamp()) + ","
                 + csv(Bukkit.getServer().getName()) + ","
                 + csv(Bukkit.getServer().getBukkitVersion()) + ","
                 + csv(System.getProperty("java.version")) + ","
-                + number(tps.getTps()) + ","
-                + number(tps.getAverageTps()) + ","
-                + number(tps.getMspt()) + ","
-                + number(compensationTps) + ","
-                + number(multiplier) + ","
-                + number(tps.getMissedTicks()) + ","
-                + number(tps.getLastDebtAdded()) + ","
-                + number(tps.getDebtBeforeClaim()) + ","
-                + tps.getLastClaimedTicks() + ","
-                + tps.getTotalCompensatedTicks() + ","
+                + number(timing.tps()) + ","
+                + number(timing.averageTps()) + ","
+                + number(timing.mspt()) + ","
+                + number(timing.compensationTps()) + ","
+                + number(timing.compensationMultiplier()) + ","
+                + number(timing.debtBeforeClaim()) + ","
+                + number(timing.debtAdded()) + ","
+                + number(timing.debtAfterClaim()) + ","
+                + timing.claimedTicks() + ","
+                + timing.totalClaimedTicks() + ","
                 + Bukkit.getOnlinePlayers().size() + ","
                 + Bukkit.getWorlds().size() + ","
-                + tickFlowEnabled + ","
-                + worldTime + ","
-                + randomTicks + ","
-                + pickup + ","
-                + mobTimers + ","
-                + potionDuration + ","
-                + tnt + ","
-                + maxCompensation;
+                + state.enabled() + ","
+                + state.worldgenSafe() + ","
+                + config.worldTimeAcceleration() + ","
+                + config.randomTickAcceleration() + ","
+                + config.pickupAcceleration() + ","
+                + config.mobTimerAcceleration() + ","
+                + config.potionDurationAcceleration() + ","
+                + config.tntAcceleration() + ","
+                + config.maxCompensationTicks() + ","
+                + config.maxEntityUpdatesPerTick() + ","
+                + stats.pickupUpdates() + ","
+                + stats.mobTimerUpdates() + ","
+                + stats.potionUpdates() + ","
+                + stats.tntUpdates() + ","
+                + stats.worldTimeUpdates() + ","
+                + stats.skippedEntityUpdates();
     }
 
     private String buildEventLine(String event, String message) {
         StringBuilder line = new StringBuilder("EVENT,").append(csv(timestamp()));
-        for (int i = 0; i < 20; i++) {
+        for (int index = 2; index < 33; index++) {
             line.append(',');
         }
         line.append(csv(event)).append(',').append(csv(message));
         return line.toString();
     }
 
-    private void writeHeader() throws IOException {
+    private synchronized void writeHeader() throws IOException {
         output.write(HEADER);
         output.newLine();
-        output.flush();
-        writeEnvironment();
-    }
-
-    private void writeEnvironment() throws IOException {
         output.write("# server=" + csv(Bukkit.getServer().getName()));
         output.newLine();
         output.write("# bukkitVersion=" + csv(Bukkit.getServer().getBukkitVersion()));
@@ -181,26 +192,32 @@ final class DiagnosticLogger {
         return names.toString();
     }
 
-    private void append(String line) {
-        synchronized (this) {
-            if (output == null) {
-                return;
-            }
-            try {
-                output.write(line);
-                output.newLine();
+    private synchronized void append(String line, boolean flush) {
+        if (output == null) {
+            return;
+        }
+        try {
+            output.write(line);
+            output.newLine();
+            if (flush) {
                 output.flush();
-            } catch (IOException exception) {
-                Bukkit.getLogger().warning("TickFlow diagnostics write failed: " + exception.getMessage());
             }
+        } catch (IOException exception) {
+            Bukkit.getLogger().warning("TickFlow diagnostics write failed: " + exception.getMessage());
+        }
+    }
+
+    private void await(Future<?> task) {
+        try {
+            task.get(2, TimeUnit.SECONDS);
+        } catch (Exception exception) {
+            task.cancel(true);
+            Bukkit.getLogger().warning("TickFlow diagnostics close timed out: " + exception.getMessage());
         }
     }
 
     private synchronized void writeEvent(String event, String message) {
-        if (output == null) {
-            return;
-        }
-        append(buildEventLine(event, message));
+        append(buildEventLine(event, message), true);
     }
 
     private synchronized void closeOutput() {
@@ -208,6 +225,7 @@ final class DiagnosticLogger {
             return;
         }
         try {
+            output.flush();
             output.close();
         } catch (IOException exception) {
             Bukkit.getLogger().warning("TickFlow diagnostics close failed: " + exception.getMessage());

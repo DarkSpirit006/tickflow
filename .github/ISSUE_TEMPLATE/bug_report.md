@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a reproducible problem
+about: Report a reproducible problem with TickFlow
 labels: bug
 ---
 
@@ -10,17 +10,18 @@ labels: bug
 - Minecraft version:
 - Java version:
 - TickFlow version:
+- Other plugins involved:
 
-## Describe the problem
+## Problem
 
-What happened?
+What happened? What did you expect instead?
 
 ## Reproduction
 
-1. 
-2. 
-3. 
+1.
+2.
+3.
 
-## Logs
+## Diagnostics
 
-Paste the relevant server log here.
+Attach the TickFlow CSV and the relevant server log when possible.

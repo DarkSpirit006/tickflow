@@ -4,7 +4,7 @@ plugins {
 
 group = "dev.tickflow"
 version = "0.1.1-SNAPSHOT"
-description = "Real-time tick compensation for Bukkit-family Minecraft servers"
+description = "Real-time tick compensation for Minecraft servers"
 
 repositories {
     maven("https://repo.purpurmc.org/snapshots")
@@ -22,7 +22,14 @@ tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
 }
 
-tasks.named<org.gradle.jvm.tasks.Jar>("jar") {
+tasks.processResources {
+    inputs.property("version", project.version)
+    filesMatching(listOf("plugin.yml", "paper-plugin.yml")) {
+        expand("version" to project.version)
+    }
+}
+
+tasks.named<Jar>("jar") {
     archiveFileName.set("TickFlow-${project.version}.jar")
     manifest {
         attributes(
@@ -32,4 +39,3 @@ tasks.named<org.gradle.jvm.tasks.Jar>("jar") {
         )
     }
 }
-

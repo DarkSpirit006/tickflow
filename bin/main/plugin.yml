@@ -1,8 +1,10 @@
 name: TickFlow
-version: '0.1.1-SNAPSHOT'
+version: '${version}'
 main: dev.tickflow.plugin.TickFlowPlugin
-description: Real-time tick compensation for Bukkit-family Minecraft servers.
-author: TickFlow contributors
+description: Real-time tick compensation for Minecraft servers.
+author: DarkSpirit006
+website: https://github.com/DarkSpirit006/tickflow
+api-version: '26.2'
 load: POSTWORLD
 commands:
   tickflow:

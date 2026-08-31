@@ -1,13 +1,21 @@
 ## Summary
 
-Describe the change and why it is needed.
+Describe what changed and why.
 
 ## Testing
 
 - [ ] `./gradlew clean build`
-- [ ] Tested on a supported server
-- [ ] Checked startup and shutdown logs
+- [ ] Tested server startup and shutdown
+- [ ] Tested the changed feature under normal TPS
+- [ ] Tested the changed feature under reduced TPS
+- [ ] Checked diagnostic output when applicable
 
 ## Compatibility
 
-List any server-version or software-specific behavior.
+Describe any Minecraft, Bukkit, Spigot, Paper, or Purpur-specific behavior.
+
+## Checklist
+
+- [ ] No debug code or generated files included
+- [ ] No new warnings introduced intentionally
+- [ ] README/configuration updated when behavior changed

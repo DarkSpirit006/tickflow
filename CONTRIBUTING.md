@@ -1,17 +1,21 @@
 # Contributing
 
-Thanks for contributing to TickFlow.
+Thanks for contributing to TickFlow. Keep changes focused, testable, and easy to review.
 
 ## Development
 
-Use the included Gradle wrapper. Run:
+TickFlow targets Purpur 26.2 and Java 25. Use the included Gradle wrapper:
 
 ```bash
 ./gradlew clean build
 ```
 
-Keep the main implementation independent of Paper-only APIs whenever possible. Version-specific behavior should fail closed: an unavailable optional hook must not prevent the plugin from loading.
+Test changes on a disposable server. Timing changes should be tested both at 20 TPS and under sustained CPU pressure. When fixing a timing bug, attach diagnostic CSV data to the pull request when practical.
+
+## Code style
+
+Use four spaces, UTF-8, LF line endings, descriptive names, and small classes with one clear responsibility. Avoid broad exception handling when a feature-specific failure can be isolated.
 
 ## Pull requests
 
-Keep changes focused, explain compatibility implications, and include reproduction steps for bug fixes.
+Explain the behavior change, compatibility impact, and test procedure. Avoid drive-by formatting changes unrelated to the patch.

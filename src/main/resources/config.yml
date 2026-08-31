@@ -1,10 +1,12 @@
 enabled: true
+
+# Timing limits
 minimum-tps-for-compensation: 1.0
 max-compensation-ticks-per-server-tick: 4
 max-compensation-multiplier: 3.0
 max-tick-debt: 80.0
 
-# Safer-by-default features
+# Compensation features
 world-time-acceleration: true
 random-tickspeed-acceleration: true
 pickup-acceleration: false
@@ -12,16 +14,16 @@ mob-timer-acceleration: false
 potion-effect-duration-acceleration: false
 tnt-acceleration: false
 
-# Global-state changes are disabled while another plugin appears to be managing them.
+# Safety
 respect-other-random-tick-changes: true
+max-entity-updates-per-tick: 2000
+protect-world-generation: true
+worldgen-protection-tps: 12.0
+worldgen-protection-exit-tps: 14.0
+worldgen-protection-window-ms: 3000
 
-# Compatibility / diagnostics
+# Diagnostics
 log-unsupported-features: true
 log-version-detection: true
-
-# Diagnostic CSV logging. Start it in-game with /tickflow log on.
 diagnostics-enabled: false
 diagnostics-sample-interval-ticks: 20
-
-# The bossbar is player-controlled with /tickflow bossbar.
-# It is never shown automatically.
