@@ -1,0 +1,16 @@
+name: TickFlow
+version: '0.1.1-SNAPSHOT'
+main: dev.tickflow.plugin.TickFlowPlugin
+description: Real-time tick compensation for Bukkit-family Minecraft servers.
+author: TickFlow contributors
+load: POSTWORLD
+commands:
+  tickflow:
+    description: View and control TickFlow.
+    usage: /tickflow <tps|status|toggle|bossbar|log|reload>
+    permission: tickflow.admin
+    aliases: [tf]
+permissions:
+  tickflow.admin:
+    description: Manage TickFlow.
+    default: op
